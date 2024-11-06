@@ -9,6 +9,7 @@ public class GenerateAggregateRoot
 {
     private readonly string _baseOutputPath;
     private readonly string _modelName;
+    private readonly string _pluralName;  // Yeni eklendi
     private readonly List<PropertyInfo> _properties;
     private readonly List<RelationshipInfo> _relationships;
     private readonly List<string> _interfaces;
@@ -29,10 +30,11 @@ public class GenerateAggregateRoot
         public string RelatedType { get; set; }
     }
 
-    public GenerateAggregateRoot(string modelName, string baseOutputPath)
+    public GenerateAggregateRoot(string modelName, string baseOutputPath, string pluralName)  // Constructor güncellendi
     {
         _modelName = modelName;
         _baseOutputPath = baseOutputPath;
+        _pluralName = pluralName;
         _properties = new List<PropertyInfo>();
         _relationships = new List<RelationshipInfo>();
         _interfaces = new List<string>();
@@ -106,7 +108,8 @@ public class GenerateAggregateRoot
         var sb = new StringBuilder();
         sb.AppendLine("using Abis.Core.DataAccess;");
         sb.AppendLine();
-        sb.AppendLine($"namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s;");
+        sb.AppendLine($"namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName};");  
+        sb.AppendLine();
         sb.AppendLine($"public class {_modelName}Language : AuditEntity, IEntityTranslation<{_modelName}>");
         sb.AppendLine("{");
         sb.AppendLine("    public int CoreId { get; set; }");
@@ -136,7 +139,9 @@ public class GenerateAggregateRoot
     private void GenerateCommandRepository()
     {
         var content = $@"using Bapsis.Api.Domain.Repositories;
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+
 public interface I{_modelName}CommandRepository : ICommandRepository<{_modelName}> {{ }}";
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Contacts", $"I{_modelName}CommandRepository.cs"), content);
@@ -145,7 +150,9 @@ public interface I{_modelName}CommandRepository : ICommandRepository<{_modelName
     private void GenerateQueryRepository()
     {
         var content = $@"using Bapsis.Api.Domain.Repositories;
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+
 public interface I{_modelName}QueryRepository : IQueryRepository<{_modelName}> {{ }}";
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Contacts", $"I{_modelName}QueryRepository.cs"), content);
@@ -155,7 +162,9 @@ public interface I{_modelName}QueryRepository : IQueryRepository<{_modelName}> {
     {
         var content = $@"using System.Linq.Expressions;
 using Bapsis.Api.Domain.Specifications.Contacts;
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+
 public interface I{_modelName}Specification : IBaseSpecification<{_modelName}>
 {{
     Expression<Func<{_modelName}, bool>> ById(int id);
@@ -169,10 +178,13 @@ public interface I{_modelName}Specification : IBaseSpecification<{_modelName}>
         var sb = new StringBuilder();
         sb.AppendLine($@"using Bapsis.Api.Domain.DomainServices.Contacts;
 using Bapsis.Api.Domain.Models;
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+
 public interface I{_modelName}DomainService : IBaseDomainService
 {{
-    #region setters");
+    #region setters
+");
 
         foreach (var prop in _properties)
         {
@@ -180,10 +192,13 @@ public interface I{_modelName}DomainService : IBaseDomainService
         }
         
         sb.AppendLine($@"    public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names);
+    
     #endregion");
-
+        sb.AppendLine();
         sb.AppendLine($@"    #region create
+
     {_modelName} Create(int id, int order, ICollection<TranslationModel> names);
+
     #endregion
 }}");
 
@@ -193,21 +208,25 @@ public interface I{_modelName}DomainService : IBaseDomainService
     private void GenerateDomainServiceImplementation()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($@"using Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+        sb.AppendLine($@"using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
 using Bapsis.Api.Domain.DomainServices.Implementations;
 using Bapsis.Api.Domain.Extensions;
 using Bapsis.Api.Domain.Models;
 using Abis.Core.Specifications;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Implementations;
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations; 
+
 public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainService
 {{
     #region injections
+
     public I{_modelName}QueryRepository {_modelName}QueryRepository {{ get; set; }}
     public I{_modelName}Specification {_modelName}Specifications {{ get; set; }}
+
     #endregion
 
-    #region setters");
+    #region setters
+");
 
         foreach (var prop in _properties)
         {
@@ -225,9 +244,11 @@ public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainS
             (id, language, value) => new {_modelName}Language {{ CoreId = id, Language = language, Name = value }}
         );
     }}
+
     #endregion
 
     #region create
+
     public {_modelName} Create(int id, int order, ICollection<TranslationModel> names)
     {{
         var {_modelName.ToCamelCase()} = {_modelName}.Create();
@@ -236,6 +257,7 @@ public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainS
         SetNameTranslations({_modelName.ToCamelCase()}, names);
         return {_modelName.ToCamelCase()};
     }}
+
     #endregion
 }}");
 
@@ -245,10 +267,11 @@ public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainS
     private void GenerateSpecificationImplementation()
     {
         var content = $@"using System.Linq.Expressions;
-using Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Contacts;
+using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
 using Bapsis.Api.Domain.Specifications.Implementations;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_modelName}s.Implementations;
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations;  
+
 public class {_modelName}Specification : BaseSpecification<{_modelName}>, I{_modelName}Specification
 {{
     public Expression<Func<{_modelName}, bool>> ById(int id) => GenericSpecification.ById<{_modelName}, int>(id);

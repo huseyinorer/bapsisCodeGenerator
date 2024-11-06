@@ -5,30 +5,21 @@ public class GenerateApplication
     private readonly string _modelPath;
     private readonly string _modelName;
     private readonly string _pluralName;
-    private readonly string _idType; // aggregate root'taki id tipi
-
+    private readonly string _idType;
+    private readonly ModuleChoice _moduleChoice;
     private const string APPLICATION_FOLDER = "Bapsis.Api.Application";
-    private enum ModuleType
-    {
-        Commons,
-        Admin,
-        Commission,
-        Coordinator,
-        Management,
-        OpenApi,
-        ProjectOffice,
-        Researcher,
-        SpendingOffice,
-        SystemManagement
-    }
+  
 
-    public GenerateApplication(string modelPath, string modelName, string pluralName)
+     public GenerateApplication(string modelPath, string modelName, string pluralName, ModuleChoice moduleChoice)
     {
         _modelPath = modelPath;
         _modelName = modelName;
         _pluralName = pluralName;
+        _moduleChoice = moduleChoice;
         _idType = DetectIdType();
     }
+
+    public string GetIdType() => _idType;
 
     private string DetectIdType()
     {
@@ -69,45 +60,20 @@ public class GenerateApplication
     {
         try
         {
-            Console.WriteLine("Lütfen modül tipini seçin:");
-            Console.WriteLine("1- Commons");
-            Console.WriteLine("2- Modules");
-            
-            var choice = Console.ReadLine();
             string basePath;
-            
-            if (choice == "1")
+            if (_moduleChoice.IsCommons)
             {
                 basePath = GetApplicationPath("Commons");
             }
-            else if (choice == "2")
-            {
-                Console.WriteLine("\nLütfen modül seçin:");
-                Console.WriteLine("1- Admin");
-                Console.WriteLine("2- Commission");
-                Console.WriteLine("3- Coordinator");
-                Console.WriteLine("4- Management");
-                Console.WriteLine("5- OpenApi");
-                Console.WriteLine("6- ProjectOffice");
-                Console.WriteLine("7- Researcher");
-                Console.WriteLine("8- SpendingOffice");
-                Console.WriteLine("9- SystemManagement");
-
-                var moduleChoice = Console.ReadLine();
-                var selectedModule = (ModuleType)Enum.Parse(typeof(ModuleType), 
-                    ((int.Parse(moduleChoice))).ToString());
-                
-                basePath = GetApplicationPath($"Modules/{selectedModule}");
-            }
             else
             {
-                throw new Exception("Geçersiz seçim!");
+                basePath = GetApplicationPath($"Modules/{_moduleChoice.SelectedModule}");
             }
 
             // Ana klasörü oluştur
             var mainFolder = Path.Combine(basePath, _pluralName);
             CreateDirectoryStructure(mainFolder);
-            GenerateFiles(mainFolder, choice == "2");
+            GenerateFiles(mainFolder, !_moduleChoice.IsCommons);
 
             Console.WriteLine($"Application katmanı başarıyla oluşturuldu.");
             Console.WriteLine($"Konum: {mainFolder}");
@@ -164,8 +130,8 @@ public class GenerateApplication
 
     private void GenerateFiles(string basePath, bool isModule)
     {
-        var modulePrefix = isModule ? "Modules." : "Commons.";
-        var namespacePath = $"Bapsis.Api.Application.Internal.{modulePrefix}{_pluralName}";
+        var modulePrefix = isModule ? $"Modules.{_moduleChoice.SelectedModule}" : "Commons";
+        var namespacePath = $"Bapsis.Api.Application.Internal.{modulePrefix}.{_pluralName}";
 
         // Generate DTOs
         GenerateDto(basePath, "Create", namespacePath);
@@ -186,21 +152,30 @@ public class GenerateApplication
     }
 
     private void GenerateDto(string basePath, string operation, string namespacePath)
+{
+    string dtoSuffix = operation switch
     {
-        var template = $@"namespace {namespacePath}.Commands.Dtos.{operation};
-public class {_modelName}{operation}dDto
+        "Create" => "d",
+        "Edit" => "ed",
+        "Delete" => "d",
+        _ => "d"
+    };
+
+    var template = $@"namespace {namespacePath}.Commands.Dtos.{operation};
+
+public class {_modelName}{operation}{dtoSuffix}Dto
 {{
     // TODO write props
 }}";
 
-        File.WriteAllText(
-            Path.Combine(basePath, "Commands", "Dtos", operation, $"{_modelName}{operation}dDto.cs"),
-            template);
-    }
+    File.WriteAllText(
+        Path.Combine(basePath, "Commands", "Dtos", operation, $"{_modelName}{operation}{dtoSuffix}Dto.cs"),
+        template);
+}
 
     private void GenerateCreateCommand(string basePath, string namespacePath)
-    {
-        var template = $@"using {namespacePath}.Commands.Dtos.Create;
+{
+    var template = $@"using {namespacePath}.Commands.Dtos.Create;
 using Bapsis.Api.Domain.AggregateRoots.{_pluralName};
 using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
 using Bapsis.Api.Domain.Constants;
@@ -218,29 +193,80 @@ public class {_modelName}CreateCommandHandler : BaseInternalService,
     IRequestHandler<{_modelName}CreateCommand, {_modelName}CreatedDto>
 {{
     #region injections
+
     public I{_modelName}CommandRepository {_modelName}CommandRepository {{ get; set; }}
     public I{_modelName}DomainService {_modelName}DomainService {{ get; set; }}
+
     #endregion
 
     public async Task<{_modelName}CreatedDto> Handle({_modelName}CreateCommand request, CancellationToken cancellationToken)
     {{
         // TODO write setters
+
         var entity = {_modelName}DomainService.Create(
             // TODO write props
          );
 
         {_modelName}CommandRepository.Insert(entity);
         Db.Commit();
-        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpper()}, cancellationToken);
+        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpperInvariant() }, cancellationToken);
+
         var response = Mapper.Map<{_modelName}CreatedDto>(entity);
+
         return response;
     }}
 }}";
 
-        File.WriteAllText(
-            Path.Combine(basePath, "Commands", "Handlers", "Create", $"{_modelName}CreateCommand.cs"),
-            template);
-    }
+    File.WriteAllText(
+        Path.Combine(basePath, "Commands", "Handlers", "Create", $"{_modelName}CreateCommand.cs"),
+        template);
+}
+
+private void GenerateEditCommand(string basePath, string namespacePath)
+{
+    var template = $@"using {namespacePath}.Commands.Dtos.Edit;
+using {namespacePath}.Commands.Dtos.Delete;
+using Bapsis.Api.Domain.AggregateRoots.{_pluralName};
+using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
+using Bapsis.Api.Domain.Constants;
+using Bapsis.Api.Domain.Models;
+using MediatR;
+
+namespace {namespacePath}.Commands.Handlers.Edit;
+
+public class {_modelName}EditCommand : IRequest<{_modelName}EditedDto>
+{{
+    // TODO write props
+}}
+
+public class {_modelName}EditCommandHandler : BaseInternalService,
+    IRequestHandler<{_modelName}EditCommand, {_modelName}EditedDto>
+{{
+    #region injections
+
+    public I{_modelName}CommandRepository {_modelName}CommandRepository {{ get; set; }}
+    public I{_modelName}DomainService {_modelName}DomainService {{ get; set; }}
+
+    #endregion
+
+    public async Task<{_modelName}EditedDto> Handle({_modelName}EditCommand request, CancellationToken cancellationToken)
+    {{
+        // TODO write setters
+        
+        {_modelName}CommandRepository.Update(entity);
+        Db.Commit();
+        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpperInvariant() }, cancellationToken);
+
+        var response = Mapper.Map<{_modelName}EditedDto>(entity);
+
+        return response;
+    }}
+}}";
+
+    File.WriteAllText(
+        Path.Combine(basePath, "Commands", "Handlers", "Edit", $"{_modelName}EditCommand.cs"),
+        template);
+}
 
     // Diğer Generate metodları benzer şekilde implement edilecek...
 
@@ -274,49 +300,7 @@ public class MapperProfiles : Profile
         File.WriteAllText(
             Path.Combine(basePath, "Profiles", "MapperProfiles.cs"),
             template);
-    }
-
-    private void GenerateEditCommand(string basePath, string namespacePath)
-    {
-        var template = $@"using {namespacePath}.Commands.Dtos.Edit;
-using {namespacePath}.Commands.Dtos.Delete;
-using Bapsis.Api.Domain.AggregateRoots.{_pluralName};
-using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
-using Bapsis.Api.Domain.Constants;
-using Bapsis.Api.Domain.Models;
-using MediatR;
-
-namespace {namespacePath}.Commands.Handlers.Edit;
-
-public class {_modelName}EditCommand : IRequest<{_modelName}EditedDto>
-{{
-    // TODO write props
-}}
-
-public class {_modelName}EditCommandHandler : BaseInternalService,
-    IRequestHandler<{_modelName}EditCommand, {_modelName}EditedDto>
-{{
-    #region injections
-    public I{_modelName}CommandRepository {_modelName}CommandRepository {{ get; set; }}
-    public I{_modelName}DomainService {_modelName}DomainService {{ get; set; }}
-    #endregion
-
-    public async Task<{_modelName}EditedDto> Handle({_modelName}EditCommand request, CancellationToken cancellationToken)
-    {{
-        // TODO write setters
-        
-        {_modelName}CommandRepository.Update(entity);
-        Db.Commit();
-        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpper()}, cancellationToken);
-        var response = Mapper.Map<{_modelName}EditedDto>(entity);
-        return response;
-    }}
-}}";
-
-        File.WriteAllText(
-            Path.Combine(basePath, "Commands", "Handlers", "Edit", $"{_modelName}EditCommand.cs"),
-            template);
-    }
+    }    
 
     private void GenerateDeleteCommand(string basePath, string namespacePath)
     {
@@ -337,22 +321,27 @@ public class {_modelName}DeleteCommandHandler : BaseInternalService,
     IRequestHandler<{_modelName}DeleteCommand, {_modelName}DeletedDto>
 {{
     #region injections
+
     public I{_modelName}CommandRepository {_modelName}CommandRepository {{ get; set; }}
     public I{_modelName}DomainService {_modelName}DomainService {{ get; set; }}
+
     #endregion
 
     public async Task<{_modelName}DeletedDto> Handle({_modelName}DeleteCommand request, CancellationToken cancellationToken)
     {{
         var entity = await QueryService
-            .GetFromCacheByIdAsync<{_modelName}, {_idType}>(CacheConstants.{_pluralName.ToUpper()}, 
-                CacheIncludeConstants.{_pluralName.ToUpper()}, request.Id);
+            .GetFromCacheByIdAsync<{_modelName}, {_idType}>(CacheConstants.{_pluralName.ToUpperInvariant() }, 
+                CacheIncludeConstants.{_pluralName.ToUpperInvariant() }, request.Id);
 
         {_modelName}DomainService.CheckNull(entity);
         {_modelName}DomainService.SetIsDeleted(entity, true);
+
         {_modelName}CommandRepository.Update(entity);
         Db.Commit();
-        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpper()}, cancellationToken);
+        await AbisCache.RemoveAsync(CacheConstants.{_pluralName.ToUpperInvariant() }, cancellationToken);
+
         var response = Mapper.Map<{_modelName}DeletedDto>(entity);
+
         return response;
     }}
 }}";
@@ -398,10 +387,11 @@ public class {_modelName}ByIdQueryHandler : BaseInternalService,
     public async Task<{_modelName}ByIdQueryDto> Handle({_modelName}ByIdQuery request, CancellationToken cancellationToken)
     {{
         var entity = await QueryService
-            .GetFromCacheByIdAsync<{_modelName}, {_idType}>(CacheConstants.{_pluralName.ToUpper()},
-                CacheIncludeConstants.{_pluralName.ToUpper()}, request.Id);
+            .GetFromCacheByIdAsync<{_modelName}, {_idType}>(CacheConstants.{_pluralName.ToUpperInvariant() },
+                CacheIncludeConstants.{_pluralName.ToUpperInvariant() }, request.Id);
         
         var response = Mapper.Map<{_modelName}ByIdQueryDto>(entity);
+
         return response;
     }}
 }}";

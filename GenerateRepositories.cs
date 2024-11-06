@@ -60,7 +60,9 @@ namespace Bapsis.Api.Data.Repositories.{_pluralName};
 public class {_modelName}CommandRepository : CommandRepositoryBase<BapsisContext, {_modelName}>, I{_modelName}CommandRepository
 {{
     #region ctor
+
     public {_modelName}CommandRepository(BapsisContext dbContext) : base(dbContext) {{ }}
+
     #endregion
 }}";
 
@@ -78,7 +80,9 @@ namespace Bapsis.Api.Data.Repositories.{_pluralName};
 public class {_modelName}QueryRepository : QueryRepositoryBase<BapsisContext, {_modelName}>, I{_modelName}QueryRepository
 {{
     #region ctor
+
     public {_modelName}QueryRepository(BapsisContext dbContext) : base(dbContext) {{ }}
+
     #endregion
 }}";
 
