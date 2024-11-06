@@ -15,6 +15,15 @@ Clone the repository and ensure you have all required dependencies installed.
 ## How to Use
 
 ### 1. Create Entity Class
+
+```
+Bapsis.Api.Domain/
+├── AggregateRoots/
+│   └── <YourEntityName>s/
+│       └── <YourEntityName>.cs
+└── ...
+```
+
 Create your basic entity class in the following path:
 ```
 Bapsis.Api.Domain/AggregateRoots/<YourEntityName>s/<YourEntityName>.cs
@@ -37,14 +46,6 @@ After completion:
 - Verify that all necessary files have been generated
 - Ensure the generated code meets your requirements
 
-## Directory Structure
-```
-Bapsis.Api.Domain/
-├── AggregateRoots/
-│   └── <YourEntityName>s/
-│       └── <YourEntityName>.cs
-└── ...
-```
 
 ## Important Notes
 - Make sure to follow the naming conventions
