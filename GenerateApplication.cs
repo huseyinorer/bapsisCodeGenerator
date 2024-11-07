@@ -7,53 +7,18 @@ public class GenerateApplication
     private readonly string _pluralName;
     private readonly string _idType;
     private readonly ModuleChoice _moduleChoice;
+    private readonly bool _hasMultiLanguageSupport;
     private const string APPLICATION_FOLDER = "Bapsis.Api.Application";
   
 
-     public GenerateApplication(string modelPath, string modelName, string pluralName, ModuleChoice moduleChoice)
+     public GenerateApplication(string modelPath, string modelName, string pluralName, ModuleChoice moduleChoice, string idType, bool hasMultiLanguageSupport)
     {
         _modelPath = modelPath;
         _modelName = modelName;
         _pluralName = pluralName;
         _moduleChoice = moduleChoice;
-        _idType = DetectIdType();
-    }
-
-    public string GetIdType() => _idType;
-
-    private string DetectIdType()
-    {
-        try
-        {
-            var modelContent = File.ReadAllText(_modelPath);
-            
-            // Regex ile Id property'sini ve tipini bul
-            var regex = new Regex(@"public\s+([a-zA-Z0-9_<>]+)\s+Id\s*{\s*get\s*;\s*set\s*;\s*}");
-            var match = regex.Match(modelContent);
-            
-            if (match.Success)
-            {
-                return match.Groups[1].Value.Trim();
-            }
-
-            // Eğer property bulunamazsa base class'ta olabilir
-            regex = new Regex(@":\s*Entity<([a-zA-Z0-9_<>]+)>");
-            match = regex.Match(modelContent);
-            
-            if (match.Success)
-            {
-                return match.Groups[1].Value.Trim();
-            }
-
-            // Tip bulunamazsa varsayılan olarak int döndür
-            return "int";
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"ID tipi belirlenirken hata oluştu: {ex.Message}");
-            Console.WriteLine("Varsayılan olarak 'int' kullanılacak.");
-            return "int";
-        }
+        _idType = idType;
+        _hasMultiLanguageSupport = hasMultiLanguageSupport;
     }
 
     public void Generate()

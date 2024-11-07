@@ -1,17 +1,4 @@
-﻿string GetPluralForm(string singular)
-{
-    // İngilizce çoğul kuralları
-    if (singular.EndsWith("y", StringComparison.OrdinalIgnoreCase))
-        return singular.Substring(0, singular.Length - 1) + "ies";
-    if (singular.EndsWith("s", StringComparison.OrdinalIgnoreCase) ||
-        singular.EndsWith("x", StringComparison.OrdinalIgnoreCase) ||
-        singular.EndsWith("ch", StringComparison.OrdinalIgnoreCase) ||
-        singular.EndsWith("sh", StringComparison.OrdinalIgnoreCase))
-        return singular + "es";
-
-    // Varsayılan kural
-    return singular + "s";
-}
+﻿using bapsisCodeGenerator;
 
 bool continueProcess = true;
 
@@ -28,10 +15,16 @@ while (continueProcess)
         string modelContent = File.ReadAllText(modelPath);
         string modelName = Path.GetFileNameWithoutExtension(modelPath);
         string modelDirectory = Path.GetDirectoryName(modelPath);
-
+    
+        // ID tipini bir kere tespit et
+        string idType = Utility.DetectIdType(modelContent);
+    
         // Beklenen çoğul form
-        string expectedPluralName = GetPluralForm(modelName);
+        string expectedPluralName = Utility.GetPluralForm(modelName);
 
+        // MultiLanguage desteği kontrolü
+        bool hasMultiLanguageSupport = Utility.HasMultiLanguageSupport(modelContent);
+    
         // Klasör adının doğru olup olmadığını kontrol et
         string folderName = new DirectoryInfo(modelDirectory).Name;
         if (folderName != expectedPluralName)
@@ -39,56 +32,55 @@ while (continueProcess)
             throw new Exception($"Model dosyası '{expectedPluralName}' adlı bir klasörde olmalıdır. " +
                               $"Mevcut klasör adı: '{folderName}'");
         }
-
-        // Domain sınıflarını oluştur
-        var generator = new GenerateAggregateRoot(modelName, modelDirectory, expectedPluralName);
+    
+        // Domain sınıflarını oluştur - idType'ı parametre olarak gönder
+        var generator = new GenerateAggregateRoot(modelName, modelDirectory, expectedPluralName, idType, hasMultiLanguageSupport);
         generator.ParseModel(modelContent);
         generator.Generate();
-
+    
         // Repository sınıflarını oluştur
         var repoGenerator = new GenerateRepositories(modelPath, modelName, expectedPluralName);
         repoGenerator.Generate();
 
         // Modül seçimini bir kere al
         var moduleChoice = ModuleChoice.GetUserChoice();
-
-        // Application katmanını oluştur
-        var appGenerator = new GenerateApplication(modelPath, modelName, expectedPluralName, moduleChoice);
+    
+        // Application katmanını oluştur - idType'ı parametre olarak gönder
+        var appGenerator = new GenerateApplication(modelPath, modelName, expectedPluralName, moduleChoice, idType, hasMultiLanguageSupport); 
         appGenerator.Generate();
 
-        // Controller oluştur
-        var controllerGenerator = new GenerateController(modelPath, modelName, expectedPluralName,
-            appGenerator.GetIdType(), moduleChoice);
+        // Controller oluştur - idType'ı parametre olarak gönder
+        var controllerGenerator = new GenerateController(modelPath, modelName, expectedPluralName, idType, moduleChoice);
         controllerGenerator.Generate();
 
-        // Unit test oluştur
-        var testGenerator = new GenerateUnitTest(modelPath, modelName, expectedPluralName);
+        // Unit test oluştur - idType'ı parametre olarak gönder
+        var testGenerator = new GenerateUnitTest(modelPath, modelName, expectedPluralName, idType, hasMultiLanguageSupport);
         testGenerator.Generate();
 
-        Console.WriteLine("\nTüm işlemler başarıyla tamamlandı.");
-        Console.Write("\nBaşka bir işlem yapmak istiyor musunuz? (E/H): ");
-        var response = Console.ReadLine()?.ToUpper();
-        continueProcess = response == "E";
+            Console.WriteLine("\nTüm işlemler başarıyla tamamlandı.");
+            Console.Write("\nBaşka bir işlem yapmak istiyor musunuz? (E/H): ");
+            var response = Console.ReadLine()?.ToUpper();
+            continueProcess = response == "E";
 
-        if (continueProcess)
-        {
-            Console.Clear(); // Konsolu temizle
-            Console.WriteLine("Yeni işlem başlatılıyor...\n");
+            if (continueProcess)
+            {
+                Console.Clear(); // Konsolu temizle
+                Console.WriteLine("Yeni işlem başlatılıyor...\n");
+            }
         }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"\nHata oluştu: {ex.Message}");
-        Console.Write("\nTekrar denemek istiyor musunuz? (E/H): ");
-        var response = Console.ReadLine()?.ToUpper();
-        continueProcess = response == "E";
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\nHata oluştu: {ex.Message}");
+            Console.Write("\nTekrar denemek istiyor musunuz? (E/H): ");
+            var response = Console.ReadLine()?.ToUpper();
+            continueProcess = response == "E";
 
-        if (continueProcess)
-        {
-            Console.Clear(); // Konsolu temizle
-            Console.WriteLine("Yeni işlem başlatılıyor...\n");
+            if (continueProcess)
+            {
+                Console.Clear(); // Konsolu temizle
+                Console.WriteLine("Yeni işlem başlatılıyor...\n");
+            }
         }
-    }
 }
 
 Console.WriteLine("\nProgram sonlandırılıyor...");

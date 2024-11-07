@@ -9,10 +9,12 @@ public class GenerateAggregateRoot
 {
     private readonly string _baseOutputPath;
     private readonly string _modelName;
-    private readonly string _pluralName;  // Yeni eklendi
+    private readonly string _pluralName;
     private readonly List<PropertyInfo> _properties;
     private readonly List<RelationshipInfo> _relationships;
     private readonly List<string> _interfaces;
+    private readonly string _idType;
+    private readonly bool _hasMultiLanguageSupport;
 
     public class PropertyInfo
     {
@@ -30,11 +32,13 @@ public class GenerateAggregateRoot
         public string RelatedType { get; set; }
     }
 
-    public GenerateAggregateRoot(string modelName, string baseOutputPath, string pluralName)  // Constructor güncellendi
+    public GenerateAggregateRoot(string modelName, string baseOutputPath, string pluralName, string idType, bool hasMultiLanguageSupport)
     {
         _modelName = modelName;
         _baseOutputPath = baseOutputPath;
         _pluralName = pluralName;
+        _idType = idType;
+        _hasMultiLanguageSupport = hasMultiLanguageSupport;
         _properties = new List<PropertyInfo>();
         _relationships = new List<RelationshipInfo>();
         _interfaces = new List<string>();
@@ -82,8 +86,10 @@ public class GenerateAggregateRoot
     public void Generate()
     {
         CreateDirectoryStructure();
-        GenerateMainClass();
-        GenerateLanguageClass();
+        if (_hasMultiLanguageSupport)
+        {
+            GenerateLanguageClass();
+        }
         GenerateInterfaces();
         GenerateImplementations();
         Console.WriteLine("Domain sınıfları başarıyla oluşturuldu.");
@@ -95,12 +101,6 @@ public class GenerateAggregateRoot
         // Model klasörünün içine Contacts ve Implementations klasörlerini oluştur
         Directory.CreateDirectory(Path.Combine(_baseOutputPath, "Contacts"));
         Directory.CreateDirectory(Path.Combine(_baseOutputPath, "Implementations"));
-    }
-
-    private void GenerateMainClass()
-    {
-        // Ana model sınıfı zaten var, bu metodu atlayalım
-        return;
     }
 
     private void GenerateLanguageClass()
@@ -115,6 +115,7 @@ public class GenerateAggregateRoot
         sb.AppendLine("    public int CoreId { get; set; }");
         sb.AppendLine("    public string Language { get; set; }");
         sb.AppendLine($"    public virtual {_modelName} Core {{ get; set; }}");
+        sb.AppendLine();
         sb.AppendLine("    public string Name { get; set; }");
         sb.AppendLine("    public string Description { get; set; }");
         sb.AppendLine("}");
@@ -163,11 +164,11 @@ public interface I{_modelName}QueryRepository : IQueryRepository<{_modelName}> {
         var content = $@"using System.Linq.Expressions;
 using Bapsis.Api.Domain.Specifications.Contacts;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
 
 public interface I{_modelName}Specification : IBaseSpecification<{_modelName}>
 {{
-    Expression<Func<{_modelName}, bool>> ById(int id);
+    Expression<Func<{_modelName}, bool>> ById({_idType} id);
 }}";
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Contacts", $"I{_modelName}Specification.cs"), content);
@@ -177,30 +178,38 @@ public interface I{_modelName}Specification : IBaseSpecification<{_modelName}>
     {
         var sb = new StringBuilder();
         sb.AppendLine($@"using Bapsis.Api.Domain.DomainServices.Contacts;
-using Bapsis.Api.Domain.Models;
+    using Bapsis.Api.Domain.Models;
+    using System;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+    namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
 
-public interface I{_modelName}DomainService : IBaseDomainService
-{{
-    #region setters
-");
+    public interface I{_modelName}DomainService : IBaseDomainService
+    {{
+        #region setters");
 
+        // Her property için setter metod tanımı
         foreach (var prop in _properties)
         {
-            sb.AppendLine($"    public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()});");
+            sb.AppendLine($@"
+        public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()});");
         }
-        
-        sb.AppendLine($@"    public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names);
-    
-    #endregion");
-        sb.AppendLine();
-        sb.AppendLine($@"    #region create
 
-    {_modelName} Create(int id, int order, ICollection<TranslationModel> names);
+        if (_hasMultiLanguageSupport)
+        {
+            sb.AppendLine($@"
+        public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names);");
+        }
 
-    #endregion
-}}");
+
+        sb.AppendLine($@"
+        #endregion
+
+        #region create
+
+        {_modelName} Create({string.Join(", ", _properties.Select(p => $"{p.Type} {p.Name.ToCamelCase()}"))}{(_interfaces.Any(i => i.Contains("IMultiLanguageEntity")) ? ", ICollection<TranslationModel> names" : "")});
+
+        #endregion
+    }}");
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Contacts", $"I{_modelName}DomainService.cs"), sb.ToString());
     }
@@ -209,57 +218,75 @@ public interface I{_modelName}DomainService : IBaseDomainService
     {
         var sb = new StringBuilder();
         sb.AppendLine($@"using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
-using Bapsis.Api.Domain.DomainServices.Implementations;
-using Bapsis.Api.Domain.Extensions;
-using Bapsis.Api.Domain.Models;
-using Abis.Core.Specifications;
+    using Bapsis.Api.Domain.DomainServices.Implementations;
+    using Bapsis.Api.Domain.Extensions;
+    using Bapsis.Api.Domain.Models;
+    using Abis.Core.Specifications;
+    using System;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations; 
+    namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations; 
 
-public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainService
-{{
-    #region injections
+    public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainService
+    {{
+        #region injections
 
-    public I{_modelName}QueryRepository {_modelName}QueryRepository {{ get; set; }}
-    public I{_modelName}Specification {_modelName}Specifications {{ get; set; }}
+        public I{_modelName}QueryRepository {_modelName}QueryRepository {{ get; set; }}
+        public I{_modelName}Specification {_modelName}Specifications {{ get; set; }}
 
-    #endregion
+        #endregion
 
-    #region setters
-");
+        #region setters");
 
+        // Her property için setter implementasyonu
         foreach (var prop in _properties)
         {
-            sb.AppendLine($"    public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()}) => {_modelName.ToCamelCase()}.Set{prop.Name}({prop.Name.ToCamelCase()});");
+            sb.AppendLine($@"
+        public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()}) => {_modelName.ToCamelCase()}.Set{prop.Name}({prop.Name.ToCamelCase()});");
         }
 
-        sb.AppendLine($@"    public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names)
-    {{
-        {_modelName.ToCamelCase()}.Translations = {_modelName.ToCamelCase()}.Translations.SetTranslations(
-            {_modelName.ToCamelCase()}.Id,
-            names,
-            t => t.CoreId,
-            t => t.Language,
-            nameof({_modelName}Language.Name),
-            (id, language, value) => new {_modelName}Language {{ CoreId = id, Language = language, Name = value }}
-        );
-    }}
+        // Eğer çoklu dil desteği varsa
+        if (_interfaces.Any(i => i.Contains("IMultiLanguageEntity")))
+        {
+            sb.AppendLine($@"
+        public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names)
+        {{
+            {_modelName.ToCamelCase()}.Translations = {_modelName.ToCamelCase()}.Translations.SetTranslations(
+                {_modelName.ToCamelCase()}.Id,
+                names,
+                t => t.CoreId,
+                t => t.Language,
+                nameof({_modelName}Language.Name),
+                (id, language, value) => new {_modelName}Language {{ CoreId = id, Language = language, Name = value }}
+            );
+        }}");
+        }
 
-    #endregion
+        sb.AppendLine($@"
+        #endregion
 
-    #region create
+        #region create
 
-    public {_modelName} Create(int id, int order, ICollection<TranslationModel> names)
-    {{
-        var {_modelName.ToCamelCase()} = {_modelName}.Create();
-        SetId({_modelName.ToCamelCase()}, id);
-        SetOrder({_modelName.ToCamelCase()}, order);
-        SetNameTranslations({_modelName.ToCamelCase()}, names);
-        return {_modelName.ToCamelCase()};
-    }}
+        public {_modelName} Create({string.Join(", ", _properties.Select(p => $"{p.Type} {p.Name.ToCamelCase()}"))}{(_interfaces.Any(i => i.Contains("IMultiLanguageEntity")) ? ", ICollection<TranslationModel> names" : "")})
+        {{
+            var {_modelName.ToCamelCase()} = {_modelName}.Create();");
 
-    #endregion
-}}");
+        // Her property için setter çağrısı
+        foreach (var prop in _properties)
+        {
+            sb.AppendLine($"        Set{prop.Name}({_modelName.ToCamelCase()}, {prop.Name.ToCamelCase()});");
+        }
+
+        // Eğer çoklu dil desteği varsa
+        if (_interfaces.Any(i => i.Contains("IMultiLanguageEntity")))
+        {
+            sb.AppendLine($"        SetNameTranslations({_modelName.ToCamelCase()}, names);");
+        }
+
+        sb.AppendLine($@"        return {_modelName.ToCamelCase()};
+        }}
+
+        #endregion
+    }}");
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Implementations", $"{_modelName}DomainService.cs"), sb.ToString());
     }
@@ -267,14 +294,14 @@ public class {_modelName}DomainService : BaseDomainService, I{_modelName}DomainS
     private void GenerateSpecificationImplementation()
     {
         var content = $@"using System.Linq.Expressions;
-using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;  
+using Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
 using Bapsis.Api.Domain.Specifications.Implementations;
 
-namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations;  
+namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Implementations;
 
 public class {_modelName}Specification : BaseSpecification<{_modelName}>, I{_modelName}Specification
 {{
-    public Expression<Func<{_modelName}, bool>> ById(int id) => GenericSpecification.ById<{_modelName}, int>(id);
+    public Expression<Func<{_modelName}, bool>> ById({_idType} id) => GenericSpecification.ById<{_modelName}, {_idType}>(id);
 }}";
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Implementations", $"{_modelName}Specification.cs"), content);

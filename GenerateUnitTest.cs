@@ -7,6 +7,8 @@ public class GenerateUnitTest
     private readonly string _modelName;
     private readonly string _pluralName;
     private readonly string _domainServicePath;
+    private readonly string _idType;
+    private readonly bool _hasMultiLanguageSupport;
     private List<MethodInfo> _setterMethods;
     private MethodInfo _createMethod;
 
@@ -23,13 +25,15 @@ public class GenerateUnitTest
         public string Name { get; set; }
     }
 
-    public GenerateUnitTest(string modelPath, string modelName, string pluralName)
+    public GenerateUnitTest(string modelPath, string modelName, string pluralName, string idType, bool hasMultiLanguageSupport)
     {
         _modelPath = modelPath;
         _modelName = modelName;
         _pluralName = pluralName;
         _setterMethods = new List<MethodInfo>();
         _domainServicePath = GetDomainServicePath();
+        _idType = idType;
+        _hasMultiLanguageSupport = hasMultiLanguageSupport;
     }
 
     private string GetDomainServicePath()
@@ -157,18 +161,6 @@ public class {_modelName}DomainServiceTest
             template);
     }
 
-    private bool HasTranslations()
-    {
-        var content = File.ReadAllText(_domainServicePath);
-        return content.Contains("SetNameTranslations") || content.Contains("SetDescriptionTranslations");
-    }
-
-    private bool HasIsActive()
-    {
-        var content = File.ReadAllText(_modelPath);
-        return content.Contains("public bool IsActive");
-    }
-
     private string GenerateTestMethods()
     {
         var sb = new StringBuilder();
@@ -176,21 +168,35 @@ public class {_modelName}DomainServiceTest
         // Setter testleri
         foreach (var method in _setterMethods)
         {
-            var isAsync = method.ReturnType == "Task";
-            var testMethodName = method.Name.Replace("Set", "");
-            var parameterName = testMethodName.ToCamelCase(); // Property adını camelCase'e çevir
-            var parameterValue = GetDefaultValueForType(method.Parameters[1].Type);
-            var camelCaseModelName = _modelName.ToCamelCase();
+            // Translation metodlarını ayrı ele alacağız
+            if (!method.Name.Contains("Translation") || _hasMultiLanguageSupport)
+            {
+                var isAsync = method.ReturnType == "Task";
+                var testMethodName = method.Name.Replace("Set", "");
+                var parameterName = testMethodName.ToCamelCase(); // Property adını camelCase'e çevir
+                var parameterValue = GetDefaultValueForType(method.Parameters[1].Type);
+                var camelCaseModelName = _modelName.ToCamelCase();
 
-            sb.AppendLine($@"
-    [Test]
-    public{(isAsync ? " async Task" : " void")} {method.Name}_WhenCalled_SetThe{testMethodName}()
-    {{
-        var {camelCaseModelName} = {_modelName}.CreateTest();
-        var {parameterName} = {parameterValue};
-        {(isAsync ? "await" : "")} _{camelCaseModelName}DomainService.{method.Name}({camelCaseModelName}, {parameterName});
-        Assert.That({camelCaseModelName}.{testMethodName}, Is.EqualTo({parameterName}));
-    }}");
+                sb.AppendLine($@"
+        [Test]
+        public{(isAsync ? " async Task" : " void")} {method.Name}_WhenCalled_SetThe{testMethodName}()
+        {{
+            var {camelCaseModelName} = {_modelName}.CreateTest();
+            var {parameterName} = {parameterValue};
+            {(isAsync ? "await" : "")} _{camelCaseModelName}DomainService.{method.Name}({camelCaseModelName}, {parameterName});
+            Assert.That({camelCaseModelName}.{testMethodName}, Is.EqualTo({parameterName}));
+        }}");
+            }
+        }
+
+        // Translation testi - artık sadece bir kere oluşturulacak
+        if (_hasMultiLanguageSupport)
+        {
+            var nameMethod = _setterMethods.FirstOrDefault(m => m.Name == "SetNameTranslations");
+            if (nameMethod != null)
+            {
+                sb.Append(GenerateTranslationTest(nameMethod, "NameTranslations"));
+            }
         }
 
         // Create test
@@ -202,21 +208,21 @@ public class {_modelName}DomainServiceTest
                 .ToList();
 
             sb.AppendLine($@"
-    [Test]
-    public void Create_WhenCalled_ReturnsNewEntity()
-    {{
-        {string.Join("\n        ", parameters)}
-
-        var result = _{_modelName.ToCamelCase()}DomainService.Create({string.Join(", ", _createMethod.Parameters.Select(p => p.Name))});
-
-        Assert.Multiple(() =>
+        [Test]
+        public void Create_WhenCalled_ReturnsNewEntity()
         {{
-            Assert.That(result, Is.Not.Null);
-            Assert.That(result.Id, Is.Not.EqualTo(Guid.Empty));
-            {string.Join("\n            ", _createMethod.Parameters.Select(p =>
-                    $"Assert.That(result.{char.ToUpper(p.Name[0]) + p.Name.Substring(1)}, Is.EqualTo({p.Name}));"))}
-        }});
-    }}");
+            {string.Join("\n        ", parameters)}
+
+            var result = _{_modelName.ToCamelCase()}DomainService.Create({string.Join(", ", _createMethod.Parameters.Select(p => p.Name))});
+
+            Assert.Multiple(() =>
+            {{
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result.Id, Is.Not.EqualTo(Guid.Empty));
+                {string.Join("\n            ", _createMethod.Parameters.Select(p => 
+                    $"Assert.That(result.{char.ToUpperInvariant(p.Name[0]) + p.Name.Substring(1)}, Is.EqualTo({p.Name}));"))}
+            }});
+        }}");
         }
 
         return sb.ToString();
@@ -224,49 +230,57 @@ public class {_modelName}DomainServiceTest
 
     private string GenerateTranslationTest(MethodInfo method, string testMethodName)
     {
+        var isAsync = method.ReturnType == "Task";
         var propertyName = testMethodName.Replace("Translations", "");
+        var methodName = isAsync ? $"{method.Name}Async" : method.Name;
+
         return $@"
-    [Test]
-    public{(method.ReturnType == "Task" ? " async Task" : " void")} {method.Name}_WhenCalled_SetThe{testMethodName}()
-    {{
-        var {_modelName.ToCamelCase()} = {_modelName}.CreateTest();
-        var {propertyName.ToLower()}s = new List<TranslationModel>
+        [Test]
+        public{(isAsync ? " async Task" : " void")} {methodName}_WhenCalled_SetThe{testMethodName}()
         {{
-            new()
+            var {_modelName.ToCamelCase()} = {_modelName}.CreateTest();
+            var {propertyName.ToLower()}s = new List<TranslationModel>
             {{
-                Value = ""Test"",
-                Language = ""tr"",
-            }}
-        }};
+                new TranslationModel
+                {{
+                    Value = ""Test-1"",
+                    Language = ""tr"",
+                }}
+            }};{(isAsync ? GenerateAsyncMockSetup() : GenerateSyncMockSetup())}
 
-        _mockGenericSpecification
-            .Setup(x => x.IsUndeleted<{_modelName}>())
-            .Returns(x => x.IsDeleted);
-        _mockGenericQueryRepo
-            .Setup(x => x.GetFromCacheAsync(It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<Expression<Func<{_modelName}, bool>>>()))
-            .ReturnsAsync(new List<{_modelName}>());
-        _{_modelName.ToCamelCase()}DomainService = new {_modelName}DomainService
-        {{
-            {_modelName}Specifications = new {_modelName}Specification {{ GenericSpecification = _mockGenericSpecification.Object }},
-            GenericQueryRepository = _mockGenericQueryRepo.Object
-        }};
+            {(isAsync ? "await" : "")} _{_modelName.ToCamelCase()}DomainService.{methodName}({_modelName.ToCamelCase()}, {propertyName.ToLower()}s);
 
-        {(method.ReturnType == "Task" ? "await" : "")} _{_modelName.ToCamelCase()}DomainService.{method.Name}({_modelName.ToCamelCase()}, {propertyName.ToLower()}s);
-
-        Assert.That({_modelName.ToCamelCase()}.Translations
-            .Select(s => new TranslationModel {{ Language = s.Language, Value = s.{propertyName} }}),
-            Is.EqualTo({propertyName.ToLower()}s));
-    }}";
+            Assert.That({_modelName.ToCamelCase()}.Translations.Select(t => $""{{t.Language}}-{{t.{propertyName}}}""),
+                Is.EquivalentTo({propertyName.ToLower()}s.Select(name => $""{{name.Language}}-{{name.Value}}"")));
+        }}";
     }
 
-    private bool ShouldSetupMocks(string methodName, bool hasIsActive)
+    private string GenerateAsyncMockSetup()
     {
-        return methodName.Contains("Order") ||
-               (methodName.Contains("IsActive") && hasIsActive) ||
-               methodName.Contains("Delete");
+        return $@"
+
+                _mock{_modelName}Specification
+                    .Setup(x => x.ExistsWithSameNameExcludingId(It.IsAny<{_idType}>(), It.IsAny<ICollection<TranslationModel>>()))
+                    .Returns(It.IsAny<Expression<Func<{_modelName}, bool>>>());
+                _mockGenericQueryRepo
+                    .Setup(x => x.GetFromCacheAsync(It.IsAny<string>(),
+                        It.IsAny<string>(),
+                        It.IsAny<Expression<Func<{_modelName}, bool>>>()))
+                    .ReturnsAsync(new List<{_modelName}>());
+                _mockGenericSpecification
+                    .Setup(x => x.IsUndeleted<{_modelName}>())
+                    .Returns(x => x.IsDeleted);
+                _{_modelName.ToCamelCase()}DomainService = new {_modelName}DomainService
+                {{
+                    {_modelName}Specifications = new {_modelName}Specification {{ GenericSpecification = _mockGenericSpecification.Object }},
+                    GenericQueryRepository = _mockGenericQueryRepo.Object
+                }}";
     }
+
+    private string GenerateSyncMockSetup()
+    {
+        return "";
+    }  
 
     private string GetDefaultValueForType(string type)
     {
