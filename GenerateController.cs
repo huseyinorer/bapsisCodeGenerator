@@ -74,13 +74,28 @@ using Microsoft.AspNetCore.Mvc;
 namespace Bapsis.Api.Http.Controllers.{modulePrefix};
 
 public class {_modelName}Controller : {baseController}
-{{
+{{  
+    #region queries
+
+    [HttpGet(""{{id}}"")]
+    public async Task<IActionResult> GetById([FromRoute] {_idType} id)
+    {{
+        var request = new {_modelName}ByIdQuery {{ Id = id }};
+        var response = await Mediator.Send(request);
+        
+    return response == null ? NotFound() : Ok(response);
+    }}
+
+    #endregion
+
     #region commands
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] {_modelName}CreateCommand request)
     {{
         var response = await Mediator.Send(request);
-        return response == null ? BadRequest() : Ok(response);
+        
+    return response == null ? BadRequest() : Ok(response);
     }}
 
     [HttpPut(""{{id}}"")]
@@ -88,7 +103,8 @@ public class {_modelName}Controller : {baseController}
     {{
         request.Id = id;
         var response = await Mediator.Send(request);
-        return response == null ? BadRequest() : Ok(response);
+        
+    return response == null ? BadRequest() : Ok(response);
     }}
 
     [HttpDelete(""{{id}}"")]
@@ -96,18 +112,10 @@ public class {_modelName}Controller : {baseController}
     {{
         var request = new {_modelName}DeleteCommand {{ Id = id }};
         var response = await Mediator.Send(request);
-        return response == null ? BadRequest() : Ok(response);
+        
+    return response == null ? BadRequest() : Ok(response);
     }}
-    #endregion
 
-    #region queries
-    [HttpGet(""{{id}}"")]
-    public async Task<IActionResult> GetById([FromRoute] {_idType} id)
-    {{
-        var request = new {_modelName}ByIdQuery {{ Id = id }};
-        var response = await Mediator.Send(request);
-        return response == null ? NotFound() : Ok(response);
-    }}
     #endregion
 }}";
 

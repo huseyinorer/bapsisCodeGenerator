@@ -252,12 +252,12 @@ public class MapperProfiles : Profile
 {{
     public MapperProfiles()
     {{
-        #region command
-        // TODO write commands maps
-        #endregion
-
         #region queries
         // TODO write queries maps
+        #endregion
+        
+        #region command
+        // TODO write commands maps
         #endregion
     }}
 }}";

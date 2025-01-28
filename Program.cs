@@ -37,7 +37,29 @@ while (continueProcess)
         var generator = new GenerateAggregateRoot(modelName, modelDirectory, expectedPluralName, idType, hasMultiLanguageSupport);
         generator.ParseModel(modelContent);
         generator.Generate();
+
+        // Db scriptyi oluştur
+        Console.WriteLine("DB Script oluşturulsun mu? (E/H):");
+        var createDbScript = Console.ReadLine()?.ToUpper() == "E";
+        if (createDbScript)
+        {
+            Console.WriteLine("Script için Developer adını girin:");
+            string developerName = Console.ReadLine();
     
+            // Script tarihini oluştur (YYYYMMDDHHmm formatında)
+            string scriptDate = DateTime.Now.ToString("yyyyMMddHHmm");
+    
+            // DB Script generator'ı çağır
+            var dbScriptGenerator = new GenerateDbScript(
+                modelPath, 
+                modelName, 
+                developerName, 
+                scriptDate, 
+                hasMultiLanguageSupport
+            );
+            dbScriptGenerator.Generate();
+        }
+
         // Repository sınıflarını oluştur
         var repoGenerator = new GenerateRepositories(modelPath, modelName, expectedPluralName);
         repoGenerator.Generate();

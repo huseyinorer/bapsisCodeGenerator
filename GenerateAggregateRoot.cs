@@ -177,39 +177,34 @@ public interface I{_modelName}Specification : IBaseSpecification<{_modelName}>
     private void GenerateDomainService()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($@"using Bapsis.Api.Domain.DomainServices.Contacts;
-    using Bapsis.Api.Domain.Models;
-    using System;
-
-    namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;
-
-    public interface I{_modelName}DomainService : IBaseDomainService
-    {{
-        #region setters");
+        sb.AppendLine($"using Bapsis.Api.Domain.DomainServices.Contacts;");
+        sb.AppendLine($"using Bapsis.Api.Domain.Models;");
+        sb.AppendLine($"using System;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace Bapsis.Api.Domain.AggregateRoots.{_pluralName}.Contacts;");
+        sb.AppendLine();
+        sb.AppendLine($"public interface I{_modelName}DomainService : IBaseDomainService");
+        sb.AppendLine($"{{");
+        sb.AppendLine($"    #region setters");
+        sb.AppendLine(); // Added empty line after region
 
         // Her property için setter metod tanımı
         foreach (var prop in _properties)
         {
-            sb.AppendLine($@"
-        public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()});");
+            sb.AppendLine($"    public void Set{prop.Name}({_modelName} {_modelName.ToCamelCase()}, {prop.Type} {prop.Name.ToCamelCase()});");
         }
 
         if (_hasMultiLanguageSupport)
         {
-            sb.AppendLine($@"
-        public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names);");
+            sb.AppendLine($"    public void SetNameTranslations({_modelName} {_modelName.ToCamelCase()}, ICollection<TranslationModel> names);");
         }
 
-
-        sb.AppendLine($@"
-        #endregion
-
-        #region create
-
-        {_modelName} Create({string.Join(", ", _properties.Select(p => $"{p.Type} {p.Name.ToCamelCase()}"))}{(_interfaces.Any(i => i.Contains("IMultiLanguageEntity")) ? ", ICollection<TranslationModel> names" : "")});
-
-        #endregion
-    }}");
+        sb.AppendLine($"    #endregion");
+        sb.AppendLine(); // Added empty line before endregion
+        sb.AppendLine($"    #region create");
+        sb.AppendLine($"    {_modelName} Create({string.Join(", ", _properties.Select(p => $"{p.Type} {p.Name.ToCamelCase()}"))}{(_interfaces.Any(i => i.Contains("IMultiLanguageEntity")) ? ", ICollection<TranslationModel> names" : "")});");
+        sb.AppendLine($"    #endregion");
+        sb.AppendLine($"}}");
 
         File.WriteAllText(Path.Combine(_baseOutputPath, "Contacts", $"I{_modelName}DomainService.cs"), sb.ToString());
     }
